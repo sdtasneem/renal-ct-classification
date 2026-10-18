@@ -1,17 +1,16 @@
 
 import pickle
-from pathlib import Path
 
 import cv2
 import numpy as np
 import streamlit as st
+from pathlib import Path
+from huggingface_hub import hf_hub_download
 from skimage.feature import hog, graycomatrix, graycoprops
 
 
-# Model files
-ARTIFACT_DIR = Path(__file__).parent / "renal_ct_artifacts"
-SVM_FILE = ARTIFACT_DIR / "svm_hog_glcm_model.pkl"
-RF_FILE = ARTIFACT_DIR / "random_forest_hog_glcm_model.pkl"
+# Hugging Face model repository
+MODEL_REPO_ID = "syedtasneem/renal-ct-models"
 
 
 # Page setup
@@ -99,16 +98,6 @@ div[data-testid="stImage"] img {
     border-radius: 16px;
 }
 
-.result-card {
-    background: white;
-    border-radius: 18px;
-    padding: 24px;
-    border: 1px solid #dce9ef;
-    box-shadow: 0 5px 16px rgba(25, 65, 85, 0.07);
-    margin-top: 10px;
-    margin-bottom: 15px;
-}
-
 .reliability-high {
     background: linear-gradient(120deg, #e1f8ed, #f3fff8);
     border-left: 7px solid #15966b;
@@ -145,23 +134,25 @@ footer {
 """, unsafe_allow_html=True)
 
 
-# Load models
-@st.cache_resource
+# Load models from Hugging Face
+@st.cache_resource(show_spinner="Downloading trained models...")
 def load_models():
-    missing = [
-        path.name for path in (SVM_FILE, RF_FILE)
-        if not path.exists()
-    ]
+    svm_path = hf_hub_download(
+        repo_id=MODEL_REPO_ID,
+        filename="svm_hog_glcm_model.pkl",
+        repo_type="model"
+    )
 
-    if missing:
-        raise FileNotFoundError(
-            "Missing model files: " + ", ".join(missing)
-        )
+    rf_path = hf_hub_download(
+        repo_id=MODEL_REPO_ID,
+        filename="random_forest_hog_glcm_model.pkl",
+        repo_type="model"
+    )
 
-    with open(SVM_FILE, "rb") as file:
+    with open(svm_path, "rb") as file:
         svm_model = pickle.load(file)
 
-    with open(RF_FILE, "rb") as file:
+    with open(rf_path, "rb") as file:
         rf_model = pickle.load(file)
 
     return svm_model, rf_model
@@ -224,13 +215,15 @@ st.markdown("""
 
 st.write("Upload a kidney CT image to view its predicted category.")
 
-# Load models
+
+# Load trained models
 try:
     svm_model, rf_model = load_models()
 except Exception as error:
     st.error(
-        "Unable to load the trained models. Check that both "
-        "pickle files are inside the renal_ct_artifacts folder."
+        "Unable to load the trained models from Hugging Face. "
+        "Please check that the model repository is public and "
+        "contains both expected pickle files."
     )
     st.stop()
 
@@ -327,6 +320,7 @@ if uploaded_image is not None:
             "Prediction failed. Please try another image and "
             "check that the trained models are compatible."
         )
+
 
 # Footer
 st.markdown("""
